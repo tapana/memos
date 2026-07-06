@@ -73,8 +73,6 @@ export const routeConfig: RouteObject[] = [
           },
         ],
       },
-      // Backward compatibility: the old `/home` URL now lives at `/`.
-      { path: "home", element: <Navigate to={Routes.HOME} replace /> },
       {
         element: <RootLayout />,
         children: [
@@ -82,8 +80,8 @@ export const routeConfig: RouteObject[] = [
             element: <MainLayout />,
             children: [
               {
+                index: true,
                 element: <LandingRoute />,
-                children: [{ index: true, element: <Home /> }],
               },
               { path: Routes.ABOUT, element: <About /> },
               { path: Routes.EXPLORE, element: <Explore /> },
@@ -91,6 +89,7 @@ export const routeConfig: RouteObject[] = [
               {
                 element: <RequireAuthRoute />,
                 children: [
+                  { path: Routes.HOME, element: <Home /> },
                   { path: Routes.ARCHIVED, element: <Archived /> },
                   { path: Routes.SHORTCUTS, element: <Shortcuts /> },
                 ],

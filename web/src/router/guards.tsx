@@ -14,6 +14,7 @@ export const LandingRoute = () => {
   const location = useLocation();
 
   if (!currentUser) {
+    // Guest: redirect to /explore (same behavior as before)
     return (
       <Navigate
         to={{
@@ -26,7 +27,17 @@ export const LandingRoute = () => {
     );
   }
 
-  return <Outlet />;
+  // Logged-in user: redirect to /explore by default (new behavior)
+  return (
+    <Navigate
+      to={{
+        pathname: ROUTES.EXPLORE,
+        search: location.search,
+        hash: location.hash,
+      }}
+      replace
+    />
+  );
 };
 
 /**
