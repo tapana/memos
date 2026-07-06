@@ -41,6 +41,14 @@ Open `http://localhost:5230` and start writing!
 curl -fsSL https://raw.githubusercontent.com/usememos/memos/main/scripts/install.sh | sh
 ```
 
+### Build and Run from Source (Docker)
+
+To build both the frontend and backend from source and run Memos in a development container on port `5231`:
+
+```bash
+docker compose -f scripts/compose.dev.yaml up -d --build
+```
+
 ### Try the Live Demo
 
 Don't want to install yet? Try our [live demo](https://demo.usememos.com/) first!
