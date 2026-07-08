@@ -49,6 +49,10 @@ cd web && pnpm release             # Build SPA into server/router/frontend/dist
 cd proto && buf generate           # Regenerate Go + TypeScript + OpenAPI
 cd proto && buf lint               # Lint proto files
 cd proto && buf format -w          # Format proto files
+
+# Docker Compose
+docker compose -f scripts/compose.dev.yaml up -d    # Dev server on :5231 (memos-dev)
+docker compose -f scripts/compose.prod.yaml up -d   # Prod server on :5230 (memos-prod)
 ```
 
 ## Code Map
