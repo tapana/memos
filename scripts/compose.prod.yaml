@@ -1,12 +1,12 @@
-name: memos-dev
+name: memos-prod
 services:
   memos:
     build:
       context: ..
       dockerfile: scripts/Dockerfile.dev
-    container_name: memos-dev
+    container_name: memos-prod
     volumes:
-      - ~/.memos/:/var/opt/memos
+      - ~/sophia-blog-data/:/var/opt/memos
     ports:
-      - 5231:5230
+      - 5230:5230
     restart: unless-stopped

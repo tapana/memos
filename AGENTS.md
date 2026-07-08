@@ -120,10 +120,11 @@ docker compose -f scripts/compose.prod.yaml up -d   # Prod server on :5230 (memo
 - Before finishing, run the checks that match the changed surface from "Change Routing".
 - For docs-only changes, `git diff --check` is sufficient unless the docs include runnable examples that should be tested.
 - If a required check cannot run locally, report the reason and the exact command that remains.
+- Verify the build using the development Dockerfile: `docker build -f scripts/Dockerfile.dev .`
 
 ## CI Reference
 
 - Backend CI: Go 1.26.2, `go mod tidy -go=1.26.2`, golangci-lint v2.11.3, test groups `store`, `server`, `internal`, `other`.
 - Frontend CI: Node 24, pnpm 11.0.1, `pnpm lint`, `pnpm test`, `pnpm build`.
 - Proto CI: `buf lint` and `buf format` check.
-- Docker: `scripts/Dockerfile`, Alpine 3.21 runtime, non-root user, port 5230, multi-arch amd64/arm64/arm/v7.
+- Docker: `scripts/Dockerfile.dev`, Alpine 3.21 runtime, non-root user, port 5230, multi-arch amd64/arm64/arm/v7.
