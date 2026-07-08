@@ -1,5 +1,7 @@
 import MemoView from "@/components/MemoView";
 import PagedMemoList from "@/components/PagedMemoList";
+import { useInstance } from "@/contexts/InstanceContext";
+import { NewMemoProvider } from "@/contexts/NewMemoContext";
 import { useView } from "@/contexts/ViewContext";
 import { useMemoFilters, useMemoSorting } from "@/hooks";
 import useCurrentUser from "@/hooks/useCurrentUser";
@@ -8,6 +10,7 @@ import { Memo, Visibility } from "@/types/proto/api/v1/memo_service_pb";
 
 const Explore = () => {
   const currentUser = useCurrentUser();
+  const { isInitialized } = useInstance();
   const { compactMode } = useView();
 
   // Determine visibility filter based on authentication status
@@ -30,15 +33,20 @@ const Explore = () => {
   });
 
   return (
-    <PagedMemoList
-      renderer={(memo: Memo) => (
-        <MemoView key={`${memo.name}-${memo.updateTime}`} memo={memo} showCreator showVisibility compact={compactMode} />
-      )}
-      listSort={listSort}
-      orderBy={orderBy}
-      filter={memoFilter}
-      showCreator
-    />
+    <NewMemoProvider>
+      <PagedMemoList
+        renderer={(memo: Memo) => (
+          <MemoView key={`${memo.name}-${memo.updateTime}`} memo={memo} showCreator showVisibility compact={compactMode} />
+        )}
+        listSort={listSort}
+        orderBy={orderBy}
+        filter={memoFilter}
+        enabled={isInitialized}
+        showMemoEditor={Boolean(currentUser)}
+        memoEditorCacheKey="explore-memo-editor"
+        showCreator
+      />
+    </NewMemoProvider>
   );
 };
 

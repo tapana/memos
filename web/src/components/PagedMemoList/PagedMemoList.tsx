@@ -31,6 +31,7 @@ interface Props {
   enabled?: boolean;
   /** When true, render the inline MemoEditor above the list (e.g. on the Home page). */
   showMemoEditor?: boolean;
+  memoEditorCacheKey?: string;
 }
 
 function useAutoFetchWhenNotScrollable({
@@ -172,7 +173,7 @@ const PagedMemoList = (props: Props) => {
             {showMemoEditor ? (
               <MemoEditor
                 className="mb-2"
-                cacheKey="home-memo-editor"
+                cacheKey={props.memoEditorCacheKey || "home-memo-editor"}
                 placeholder={t("editor.any-thoughts")}
                 defaultCreateTime={defaultCreateTime}
               />
