@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, RotateCcw, X, ZoomIn, ZoomOut } from "lucide-react";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import MotionPhotoPreview from "@/components/MotionPhotoPreview";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -27,6 +27,10 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
   const sm = useMediaQuery("sm");
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [zoomScale, setZoomScale] = useState(MIN_ZOOM);
+  const [offsetX, setOffsetX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const mediaWrapperRef = useRef<HTMLDivElement>(null);
   const previewItems = useMemo(
     () => items ?? imgUrls.map((url) => ({ id: url, kind: "image" as const, sourceUrl: url, posterUrl: url, filename: "Image" })),
     [imgUrls, items],
@@ -77,12 +81,96 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
     setZoomScale(MIN_ZOOM);
   }, [currentItem?.id, open]);
 
+  useEffect(() => {
+    if (offsetX !== 0) {
+      if (mediaWrapperRef.current) {
+        // Force a style recalculation to apply the translation immediately
+        const _ = mediaWrapperRef.current.offsetHeight;
+      }
+      setIsDragging(false);
+      setOffsetX(0);
+    }
+  }, [currentIndex]);
+
   const handleClose = () => onOpenChange(false);
+
+  const changeIndexWithSlide = (nextIndex: number, direction: "left" | "right") => {
+    if (nextIndex === currentIndex || nextIndex < 0 || nextIndex >= itemCount) {
+      return;
+    }
+    const entryOffset = direction === "left" ? window.innerWidth : -window.innerWidth;
+
+    setIsDragging(true);
+    setOffsetX(entryOffset);
+    setCurrentIndex(nextIndex);
+  };
+
   const handlePrevious = () => {
-    setCurrentIndex((prev) => Math.max(prev - 1, 0));
+    changeIndexWithSlide(safeIndex - 1, "right");
   };
   const handleNext = () => {
-    setCurrentIndex((prev) => Math.min(prev + 1, itemCount - 1));
+    changeIndexWithSlide(safeIndex + 1, "left");
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1) {
+      touchStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchStartRef.current || zoomScale > MIN_ZOOM) {
+      return;
+    }
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - touchStartRef.current.x;
+    const deltaY = touch.clientY - touchStartRef.current.y;
+
+    if (!isDragging && Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      setIsDragging(true);
+    }
+
+    if (isDragging) {
+      if ((deltaX > 0 && !canGoPrevious) || (deltaX < 0 && !canGoNext)) {
+        setOffsetX(deltaX * 0.3);
+      } else {
+        setOffsetX(deltaX);
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchStartRef.current) {
+      return;
+    }
+    const touch = e.changedTouches[0];
+    if (!touch || zoomScale > MIN_ZOOM) {
+      touchStartRef.current = null;
+      setIsDragging(false);
+      setOffsetX(0);
+      return;
+    }
+
+    const deltaX = touch.clientX - touchStartRef.current.x;
+    const deltaY = touch.clientY - touchStartRef.current.y;
+    touchStartRef.current = null;
+
+    const minSwipeDistance = 50;
+    if (isDragging && Math.abs(deltaX) > minSwipeDistance && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      if (deltaX > 0 && canGoPrevious) {
+        handlePrevious();
+        return;
+      } else if (deltaX < 0 && canGoNext) {
+        handleNext();
+        return;
+      }
+    }
+
+    setIsDragging(false);
+    setOffsetX(0);
   };
 
   const updateZoom = (nextScale: number) => {
@@ -153,8 +241,19 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
               handleClose();
             }
           }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
         >
-          <div className="flex max-h-full max-w-full items-center justify-center" onClick={(event) => event.stopPropagation()}>
+          <div
+            ref={mediaWrapperRef}
+            className="flex max-h-full max-w-full items-center justify-center"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              transform: `translate3d(${offsetX}px, 0px, 0)`,
+              transition: isDragging ? "none" : "transform 200ms ease-out",
+            }}
+          >
             {currentItem.kind === "video" ? (
               <video
                 key={currentItem.id}

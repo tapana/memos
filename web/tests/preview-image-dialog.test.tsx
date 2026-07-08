@@ -115,4 +115,62 @@ describe("<PreviewImageDialog>", () => {
     expect(screen.getByRole("button", { name: /previous item/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /next item/i })).toBeInTheDocument();
   });
+
+  it("navigates to next and previous items using swipe gestures", () => {
+    render(
+      <PreviewImageDialog
+        open
+        onOpenChange={vi.fn()}
+        items={[
+          { id: "image-1", kind: "image", sourceUrl: "/image-1.jpg", posterUrl: "/image-1.jpg", filename: "image-1.jpg" },
+          { id: "image-2", kind: "image", sourceUrl: "/image-2.jpg", posterUrl: "/image-2.jpg", filename: "image-2.jpg" },
+        ]}
+      />,
+    );
+
+    const surface = screen.getByTestId("preview-zoom-surface");
+
+    expect(screen.getByAltText("Preview image 1 of 2")).toBeInTheDocument();
+
+    // Swipe left (next item): from x=200 to x=100
+    fireEvent.touchStart(surface, { touches: [{ clientX: 200, clientY: 100 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 100, clientY: 100 }] });
+
+    expect(screen.getByAltText("Preview image 2 of 2")).toBeInTheDocument();
+
+    // Swipe right (previous item): from x=100 to x=200
+    fireEvent.touchStart(surface, { touches: [{ clientX: 100, clientY: 100 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 200, clientY: 100 }] });
+
+    expect(screen.getByAltText("Preview image 1 of 2")).toBeInTheDocument();
+  });
+
+  it("does not navigate when swiping vertically or if swipe distance is too small", () => {
+    render(
+      <PreviewImageDialog
+        open
+        onOpenChange={vi.fn()}
+        items={[
+          { id: "image-1", kind: "image", sourceUrl: "/image-1.jpg", posterUrl: "/image-1.jpg", filename: "image-1.jpg" },
+          { id: "image-2", kind: "image", sourceUrl: "/image-2.jpg", posterUrl: "/image-2.jpg", filename: "image-2.jpg" },
+        ]}
+      />,
+    );
+
+    const surface = screen.getByTestId("preview-zoom-surface");
+
+    expect(screen.getByAltText("Preview image 1 of 2")).toBeInTheDocument();
+
+    // Swipe down (vertical): from clientY=100 to clientY=200 (clientX constant)
+    fireEvent.touchStart(surface, { touches: [{ clientX: 100, clientY: 100 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 100, clientY: 200 }] });
+
+    expect(screen.getByAltText("Preview image 1 of 2")).toBeInTheDocument();
+
+    // Tiny swipe (distance < 50px): from x=100 to x=120
+    fireEvent.touchStart(surface, { touches: [{ clientX: 100, clientY: 100 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 120, clientY: 100 }] });
+
+    expect(screen.getByAltText("Preview image 1 of 2")).toBeInTheDocument();
+  });
 });
