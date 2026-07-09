@@ -50,9 +50,12 @@ cd proto && buf generate           # Regenerate Go + TypeScript + OpenAPI
 cd proto && buf lint               # Lint proto files
 cd proto && buf format -w          # Format proto files
 
-# Docker Compose
-docker compose -f scripts/compose.dev.yaml up -d    # Dev server on :5231 (memos-dev) - ONLY USE DEV SERVER DURING TESTING/DEV VERIFICATION
-docker compose -f scripts/compose.prod.yaml up -d   # Prod server on :5230 (memos-prod)
+# Docker Compose & Verification Build
+docker build -f scripts/Dockerfile.dev .                              # Verify build with development Dockerfile
+docker compose -f scripts/compose.dev.yaml up -d                      # Start dev server on :5231 (memos-dev) - ONLY USE DEV SERVER DURING TESTING/DEV VERIFICATION
+docker compose -f scripts/compose.dev.yaml down                       # Stop dev server
+docker compose -f scripts/compose.dev.yaml down && docker compose -f scripts/compose.dev.yaml up -d # Restart dev server
+docker compose -f scripts/compose.prod.yaml up -d                     # Prod server on :5230 (memos-prod)
 ```
 
 ## Code Map
@@ -121,6 +124,7 @@ docker compose -f scripts/compose.prod.yaml up -d   # Prod server on :5230 (memo
 - For docs-only changes, `git diff --check` is sufficient unless the docs include runnable examples that should be tested.
 - If a required check cannot run locally, report the reason and the exact command that remains.
 - Verify the build using the development Dockerfile: `docker build -f scripts/Dockerfile.dev .`
+- Restart the dev server after verify: `docker compose -f scripts/compose.dev.yaml down && docker compose -f scripts/compose.dev.yaml up -d`
 
 ## CI Reference
 
