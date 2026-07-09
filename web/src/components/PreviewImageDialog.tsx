@@ -29,6 +29,7 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
   const [zoomScale, setZoomScale] = useState(MIN_ZOOM);
   const [offsetX, setOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const mediaWrapperRef = useRef<HTMLDivElement>(null);
   const previewItems = useMemo(
@@ -64,21 +65,22 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
       }
 
       if (event.key === "ArrowLeft") {
-        setCurrentIndex((prev) => Math.max(prev - 1, 0));
+        handlePrevious();
         return;
       }
 
       if (event.key === "ArrowRight") {
-        setCurrentIndex((prev) => Math.min(prev + 1, itemCount - 1));
+        handleNext();
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [itemCount, onOpenChange, open]);
+  }, [itemCount, onOpenChange, open, currentIndex]);
 
   useEffect(() => {
     setZoomScale(MIN_ZOOM);
+    setIsLoaded(false);
   }, [currentItem?.id, open]);
 
   useEffect(() => {
@@ -98,7 +100,9 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
     if (nextIndex === currentIndex || nextIndex < 0 || nextIndex >= itemCount) {
       return;
     }
-    const entryOffset = direction === "left" ? window.innerWidth : -window.innerWidth;
+    const slideWidth = mediaWrapperRef.current ? mediaWrapperRef.current.clientWidth : window.innerWidth;
+    const baseOffset = direction === "left" ? (slideWidth + 24) : -(slideWidth + 24);
+    const entryOffset = baseOffset + offsetX;
 
     setIsDragging(true);
     setOffsetX(entryOffset);
@@ -187,6 +191,78 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
   };
   const handleDoubleClick = () => setZoomScale((scale) => (scale === MIN_ZOOM ? DOUBLE_TAP_ZOOM : MIN_ZOOM));
 
+  const renderMediaItem = (item: PreviewMediaItem, index: number, isCurrent: boolean) => {
+    if (item.kind === "video") {
+      return (
+        <video
+          key={item.id}
+          src={item.sourceUrl}
+          poster={item.posterUrl}
+          className="max-h-[calc(100vh-8rem)] max-w-[calc(100vw-1.5rem)] rounded-md object-contain sm:max-h-[calc(100vh-7rem)] sm:max-w-[calc(100vw-8rem)]"
+          controls={isCurrent}
+          autoPlay={isCurrent}
+          playsInline
+        />
+      );
+    }
+
+    if (item.kind === "motion") {
+      return (
+        <MotionPhotoPreview
+          key={item.id}
+          posterUrl={item.posterUrl}
+          motionUrl={item.motionUrl}
+          alt={`Preview live photo ${index + 1} of ${itemCount}`}
+          presentationTimestampUs={item.presentationTimestampUs}
+          badgeClassName="left-3 top-3 sm:left-4 sm:top-4"
+          mediaClassName="max-h-[calc(100vh-8rem)] max-w-[calc(100vw-1.5rem)] rounded-md object-contain sm:max-h-[calc(100vh-7rem)] sm:max-w-[calc(100vw-8rem)]"
+        />
+      );
+    }
+
+    if (isCurrent) {
+      return (
+        <div className="relative flex items-center justify-center max-h-full max-w-full">
+          {!isLoaded && item.posterUrl && (
+            <img
+              src={item.posterUrl}
+              alt=""
+              className="max-h-[calc(100vh-8rem)] max-w-[calc(100vw-1.5rem)] rounded-md object-contain select-none sm:max-h-[calc(100vh-7rem)] sm:max-w-[calc(100vw-8rem)] blur-xs"
+              draggable={false}
+            />
+          )}
+          <img
+            src={item.sourceUrl}
+            alt={`Preview image ${index + 1} of ${itemCount}`}
+            className={cn(
+              "max-h-[calc(100vh-8rem)] max-w-[calc(100vw-1.5rem)] rounded-md object-contain select-none sm:max-h-[calc(100vh-7rem)] sm:max-w-[calc(100vw-8rem)]",
+              !isLoaded && "absolute opacity-0 pointer-events-none"
+            )}
+            onLoad={() => setIsLoaded(true)}
+            style={{
+              transform: `translate3d(0px, 0px, 0) scale(${zoomScale})`,
+              transition: "transform 120ms ease-out",
+              transformOrigin: "center center",
+            }}
+            onDoubleClick={handleDoubleClick}
+            draggable={false}
+            loading="eager"
+          />
+        </div>
+      );
+    }
+
+    return (
+      <img
+        src={item.sourceUrl}
+        alt={`Preview image ${index + 1} of ${itemCount}`}
+        className="max-h-[calc(100vh-8rem)] max-w-[calc(100vw-1.5rem)] rounded-md object-contain select-none sm:max-h-[calc(100vh-7rem)] sm:max-w-[calc(100vw-8rem)]"
+        draggable={false}
+        loading="lazy"
+      />
+    );
+  };
+
   if (!itemCount || !currentItem) {
     return null;
   }
@@ -247,48 +323,34 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
         >
           <div
             ref={mediaWrapperRef}
-            className="flex max-h-full max-w-full items-center justify-center"
+            className="relative w-full h-full flex items-center justify-center overflow-visible"
             onClick={(event) => event.stopPropagation()}
             style={{
               transform: `translate3d(${offsetX}px, 0px, 0)`,
               transition: isDragging ? "none" : "transform 200ms ease-out",
             }}
           >
-            {currentItem.kind === "video" ? (
-              <video
-                key={currentItem.id}
-                src={currentItem.sourceUrl}
-                poster={currentItem.posterUrl}
-                className="max-h-[calc(100vh-8rem)] max-w-[calc(100vw-1.5rem)] rounded-md object-contain sm:max-h-[calc(100vh-7rem)] sm:max-w-[calc(100vw-8rem)]"
-                controls
-                autoPlay
-                playsInline
-              />
-            ) : currentItem.kind === "motion" ? (
-              <MotionPhotoPreview
-                key={currentItem.id}
-                posterUrl={currentItem.posterUrl}
-                motionUrl={currentItem.motionUrl}
-                alt={`Preview live photo ${safeIndex + 1} of ${itemCount}`}
-                presentationTimestampUs={currentItem.presentationTimestampUs}
-                badgeClassName="left-3 top-3 sm:left-4 sm:top-4"
-                mediaClassName="max-h-[calc(100vh-8rem)] max-w-[calc(100vw-1.5rem)] rounded-md object-contain sm:max-h-[calc(100vh-7rem)] sm:max-w-[calc(100vw-8rem)]"
-              />
-            ) : (
-              <img
-                src={currentItem.sourceUrl}
-                alt={`Preview image ${safeIndex + 1} of ${itemCount}`}
-                className="max-h-[calc(100vh-8rem)] max-w-[calc(100vw-1.5rem)] rounded-md object-contain select-none sm:max-h-[calc(100vh-7rem)] sm:max-w-[calc(100vw-8rem)]"
-                style={{
-                  transform: `translate3d(0px, 0px, 0) scale(${zoomScale})`,
-                  transition: "transform 120ms ease-out",
-                  transformOrigin: "center center",
-                }}
-                onDoubleClick={handleDoubleClick}
-                draggable={false}
-                loading="eager"
-                decoding="async"
-              />
+            {canGoPrevious && (
+              <div
+                className="absolute w-full h-full flex items-center justify-center"
+                style={{ transform: `translate3d(calc(-100% - 24px), 0px, 0)` }}
+              >
+                {renderMediaItem(previewItems[safeIndex - 1], safeIndex - 1, false)}
+              </div>
+            )}
+            <div
+              className="absolute w-full h-full flex items-center justify-center"
+              style={{ transform: `translate3d(0px, 0px, 0)` }}
+            >
+              {renderMediaItem(previewItems[safeIndex], safeIndex, true)}
+            </div>
+            {canGoNext && (
+              <div
+                className="absolute w-full h-full flex items-center justify-center"
+                style={{ transform: `translate3d(calc(100% + 24px), 0px, 0)` }}
+              >
+                {renderMediaItem(previewItems[safeIndex + 1], safeIndex + 1, false)}
+              </div>
             )}
           </div>
         </div>
