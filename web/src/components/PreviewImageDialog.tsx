@@ -32,10 +32,64 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
   const [isLoaded, setIsLoaded] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const mediaWrapperRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const zoomSurfaceRef = useRef<HTMLDivElement>(null);
+  const [imageTranslate, setImageTranslate] = useState({ x: 0, y: 0 });
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [isPinching, setIsPinching] = useState(false);
+
+  const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const translateStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const pinchStartDistanceRef = useRef<number | null>(null);
+  const pinchStartScaleRef = useRef<number>(MIN_ZOOM);
+  const pinchStartMidpointRef = useRef<{ x: number; y: number } | null>(null);
+  const lastTapTimeRef = useRef<number>(0);
+  const lastTouchDblTapTimeRef = useRef<number>(0);
+  const isDoubleTappingRef = useRef<boolean>(false);
   const previewItems = useMemo(
     () => items ?? imgUrls.map((url) => ({ id: url, kind: "image" as const, sourceUrl: url, posterUrl: url, filename: "Image" })),
     [imgUrls, items],
   );
+
+  const clampImageTranslation = (x: number, y: number, scale: number) => {
+    if (!imageRef.current || !mediaWrapperRef.current) {
+      return { x, y };
+    }
+
+    const img = imageRef.current;
+    const container = mediaWrapperRef.current;
+
+    const naturalWidth = img.naturalWidth || 1;
+    const naturalHeight = img.naturalHeight || 1;
+    const clientWidth = img.clientWidth;
+    const clientHeight = img.clientHeight;
+
+    const naturalRatio = naturalWidth / naturalHeight;
+    const clientRatio = clientWidth / clientHeight;
+
+    let renderedWidth = clientWidth;
+    let renderedHeight = clientHeight;
+
+    if (clientRatio > naturalRatio) {
+      renderedWidth = clientHeight * naturalRatio;
+    } else {
+      renderedHeight = clientWidth / naturalRatio;
+    }
+
+    const scaledWidth = renderedWidth * scale;
+    const scaledHeight = renderedHeight * scale;
+
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+
+    const maxTranslateX = scaledWidth > containerWidth ? (scaledWidth - containerWidth) / 2 : 0;
+    const maxTranslateY = scaledHeight > containerHeight ? (scaledHeight - containerHeight) / 2 : 0;
+
+    return {
+      x: Math.max(-maxTranslateX, Math.min(maxTranslateX, x)),
+      y: Math.max(-maxTranslateY, Math.min(maxTranslateY, y)),
+    };
+  };
 
   useEffect(() => {
     if (open) {
@@ -80,6 +134,7 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
 
   useEffect(() => {
     setZoomScale(MIN_ZOOM);
+    setImageTranslate({ x: 0, y: 0 });
     setIsLoaded(false);
   }, [currentItem?.id, open]);
 
@@ -116,71 +171,216 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
     changeIndexWithSlide(safeIndex + 1, "left");
   };
 
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length === 1) {
-      touchStartRef.current = {
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY,
-      };
-    }
-  };
+  const zoomScaleRef = useRef(zoomScale);
+  const imageTranslateRef = useRef(imageTranslate);
+  const isDraggingImageRef = useRef(isDraggingImage);
+  const isPinchingRef = useRef(isPinching);
+  const isDraggingRef = useRef(isDragging);
+  const offsetXRef = useRef(offsetX);
 
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!touchStartRef.current || zoomScale > MIN_ZOOM) {
-      return;
-    }
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - touchStartRef.current.x;
-    const deltaY = touch.clientY - touchStartRef.current.y;
+  zoomScaleRef.current = zoomScale;
+  imageTranslateRef.current = imageTranslate;
+  isDraggingImageRef.current = isDraggingImage;
+  isPinchingRef.current = isPinching;
+  isDraggingRef.current = isDragging;
+  offsetXRef.current = offsetX;
 
-    if (!isDragging && Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
-      setIsDragging(true);
-    }
+  useEffect(() => {
+    const surface = zoomSurfaceRef.current;
+    if (!surface) return;
 
-    if (isDragging) {
-      if ((deltaX > 0 && !canGoPrevious) || (deltaX < 0 && !canGoNext)) {
-        setOffsetX(deltaX * 0.3);
-      } else {
-        setOffsetX(deltaX);
+    const onTouchStart = (e: TouchEvent) => {
+      lastTouchDblTapTimeRef.current = Date.now();
+      const currentZoomScale = zoomScaleRef.current;
+      const currentImageTranslate = imageTranslateRef.current;
+
+      if (e.touches.length === 1) {
+        const now = Date.now();
+        const DOUBLE_TAP_DELAY = 300;
+        if (now - lastTapTimeRef.current < DOUBLE_TAP_DELAY) {
+          e.preventDefault(); // Prevent native double-tap-to-zoom
+          isDoubleTappingRef.current = true;
+          setIsDraggingImage(false);
+          setIsPinching(false);
+          touchStartRef.current = null;
+
+          if (currentZoomScale > MIN_ZOOM || currentImageTranslate.x !== 0 || currentImageTranslate.y !== 0) {
+            resetZoom();
+          } else {
+            setZoomScale(DOUBLE_TAP_ZOOM);
+            setImageTranslate({ x: 0, y: 0 });
+          }
+
+          lastTapTimeRef.current = 0;
+          return;
+        }
+        lastTapTimeRef.current = now;
+
+        if (currentZoomScale > MIN_ZOOM) {
+          setIsDraggingImage(true);
+          dragStartRef.current = {
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY,
+          };
+          translateStartRef.current = { ...currentImageTranslate };
+        } else {
+          touchStartRef.current = {
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY,
+          };
+        }
+      } else if (e.touches.length === 2) {
+        e.preventDefault(); // Prevent native pinch-to-zoom
+        setIsPinching(true);
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        pinchStartDistanceRef.current = dist;
+        pinchStartScaleRef.current = currentZoomScale;
+
+        const midX = (t1.clientX + t2.clientX) / 2;
+        const midY = (t1.clientY + t2.clientY) / 2;
+        pinchStartMidpointRef.current = { x: midX, y: midY };
+        translateStartRef.current = { ...currentImageTranslate };
       }
-    }
-  };
+    };
 
-  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!touchStartRef.current) {
-      return;
-    }
-    const touch = e.changedTouches[0];
-    if (!touch || zoomScale > MIN_ZOOM) {
+    const onTouchMove = (e: TouchEvent) => {
+      const currentZoomScale = zoomScaleRef.current;
+      const currentIsDraggingImage = isDraggingImageRef.current;
+      const currentIsDragging = isDraggingRef.current;
+      const currentIsPinching = isPinchingRef.current;
+
+      if (e.touches.length === 1) {
+        if (currentZoomScale > MIN_ZOOM && currentIsDraggingImage) {
+          const deltaX = e.touches[0].clientX - dragStartRef.current.x;
+          const deltaY = e.touches[0].clientY - dragStartRef.current.y;
+          const targetX = translateStartRef.current.x + deltaX;
+          const targetY = translateStartRef.current.y + deltaY;
+          setImageTranslate(clampImageTranslation(targetX, targetY, currentZoomScale));
+        } else if (currentZoomScale === MIN_ZOOM && touchStartRef.current) {
+          const touch = e.touches[0];
+          const deltaX = touch.clientX - touchStartRef.current.x;
+          const deltaY = touch.clientY - touchStartRef.current.y;
+
+          if (!currentIsDragging && Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
+            setIsDragging(true);
+          }
+
+          if (currentIsDragging) {
+            if ((deltaX > 0 && !canGoPrevious) || (deltaX < 0 && !canGoNext)) {
+              setOffsetX(deltaX * 0.3);
+            } else {
+              setOffsetX(deltaX);
+            }
+          }
+        }
+      } else if (e.touches.length === 2 && currentIsPinching) {
+        e.preventDefault(); // Prevent native pinch-to-zoom
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+        if (pinchStartDistanceRef.current !== null) {
+          const factor = dist / pinchStartDistanceRef.current;
+          const newScale = clampZoom(pinchStartScaleRef.current * factor);
+          setZoomScale(newScale);
+
+          if (pinchStartMidpointRef.current) {
+            const midX = (t1.clientX + t2.clientX) / 2;
+            const midY = (t1.clientY + t2.clientY) / 2;
+            const deltaX = midX - pinchStartMidpointRef.current.x;
+            const deltaY = midY - pinchStartMidpointRef.current.y;
+            const targetX = translateStartRef.current.x + deltaX;
+            const targetY = translateStartRef.current.y + deltaY;
+            setImageTranslate(clampImageTranslation(targetX, targetY, newScale));
+          }
+        }
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      const currentZoomScale = zoomScaleRef.current;
+      const currentIsDraggingImage = isDraggingImageRef.current;
+      const currentIsDragging = isDraggingRef.current;
+      const currentIsPinching = isPinchingRef.current;
+
+      if (isDoubleTappingRef.current) {
+        e.preventDefault();
+        isDoubleTappingRef.current = false;
+      }
+      if (currentIsDraggingImage) {
+        setIsDraggingImage(false);
+      }
+      if (currentIsPinching) {
+        setIsPinching(false);
+        pinchStartDistanceRef.current = null;
+        pinchStartMidpointRef.current = null;
+      }
+
+      if (!touchStartRef.current) {
+        return;
+      }
+      const touch = e.changedTouches[0];
+      if (!touch || currentZoomScale > MIN_ZOOM) {
+        touchStartRef.current = null;
+        setIsDragging(false);
+        setOffsetX(0);
+        return;
+      }
+
+      const deltaX = touch.clientX - touchStartRef.current.x;
+      const deltaY = touch.clientY - touchStartRef.current.y;
       touchStartRef.current = null;
+
+      const minSwipeDistance = 50;
+      if (currentIsDragging && Math.abs(deltaX) > minSwipeDistance && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+        if (deltaX > 0 && canGoPrevious) {
+          handlePrevious();
+          return;
+        } else if (deltaX < 0 && canGoNext) {
+          handleNext();
+          return;
+        }
+      }
+
       setIsDragging(false);
       setOffsetX(0);
-      return;
-    }
+    };
 
-    const deltaX = touch.clientX - touchStartRef.current.x;
-    const deltaY = touch.clientY - touchStartRef.current.y;
-    touchStartRef.current = null;
+    surface.addEventListener("touchstart", onTouchStart, { passive: false });
+    surface.addEventListener("touchmove", onTouchMove, { passive: false });
+    surface.addEventListener("touchend", onTouchEnd, { passive: false });
 
-    const minSwipeDistance = 50;
-    if (isDragging && Math.abs(deltaX) > minSwipeDistance && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-      if (deltaX > 0 && canGoPrevious) {
-        handlePrevious();
-        return;
-      } else if (deltaX < 0 && canGoNext) {
-        handleNext();
-        return;
-      }
-    }
+    return () => {
+      surface.removeEventListener("touchstart", onTouchStart);
+      surface.removeEventListener("touchmove", onTouchMove);
+      surface.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [
+    canGoPrevious,
+    canGoNext,
+    itemCount,
+    currentIndex,
+    open
+  ]);
 
-    setIsDragging(false);
-    setOffsetX(0);
-  };
 
   const updateZoom = (nextScale: number) => {
-    setZoomScale(clampZoom(nextScale));
+    const clamped = clampZoom(nextScale);
+    setZoomScale(clamped);
+    if (clamped === MIN_ZOOM) {
+      setImageTranslate({ x: 0, y: 0 });
+    } else {
+      setImageTranslate((prev) => clampImageTranslation(prev.x, prev.y, clamped));
+    }
   };
-  const resetZoom = () => setZoomScale(MIN_ZOOM);
+
+  const resetZoom = () => {
+    setZoomScale(MIN_ZOOM);
+    setImageTranslate({ x: 0, y: 0 });
+  };
+
   const handleZoomIn = () => updateZoom(zoomScale + ZOOM_STEP);
   const handleZoomOut = () => updateZoom(zoomScale - ZOOM_STEP);
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
@@ -189,7 +389,49 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
       updateZoom(zoomScale + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
     }
   };
-  const handleDoubleClick = () => setZoomScale((scale) => (scale === MIN_ZOOM ? DOUBLE_TAP_ZOOM : MIN_ZOOM));
+
+  const handleDoubleClick = () => {
+    if (Date.now() - lastTouchDblTapTimeRef.current < 1000) {
+      // Ignore simulated double click following touch activity on mobile
+      return;
+    }
+
+    if (zoomScale > MIN_ZOOM || imageTranslate.x !== 0 || imageTranslate.y !== 0) {
+      resetZoom();
+    } else {
+      setZoomScale(DOUBLE_TAP_ZOOM);
+      setImageTranslate({ x: 0, y: 0 });
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (zoomScale > MIN_ZOOM && isImagePreview) {
+      if (e.button !== 0) return;
+      setIsDraggingImage(true);
+      dragStartRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+      };
+      translateStartRef.current = { ...imageTranslate };
+      e.preventDefault();
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (zoomScale > MIN_ZOOM && isDraggingImage) {
+      const deltaX = e.clientX - dragStartRef.current.x;
+      const deltaY = e.clientY - dragStartRef.current.y;
+      const targetX = translateStartRef.current.x + deltaX;
+      const targetY = translateStartRef.current.y + deltaY;
+      setImageTranslate(clampImageTranslation(targetX, targetY, zoomScale));
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (isDraggingImage) {
+      setIsDraggingImage(false);
+    }
+  };
 
   const renderMediaItem = (item: PreviewMediaItem, index: number, isCurrent: boolean) => {
     if (item.kind === "video") {
@@ -222,7 +464,7 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
 
     if (isCurrent) {
       return (
-        <div className="relative flex items-center justify-center max-h-full max-w-full">
+        <div className="relative flex items-center justify-center max-h-full max-w-full" style={{ touchAction: "none" }}>
           {!isLoaded && item.posterUrl && (
             <img
               src={item.posterUrl}
@@ -232,6 +474,7 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
             />
           )}
           <img
+            ref={imageRef}
             src={item.sourceUrl}
             alt={`Preview image ${index + 1} of ${itemCount}`}
             className={cn(
@@ -240,9 +483,10 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
             )}
             onLoad={() => setIsLoaded(true)}
             style={{
-              transform: `translate3d(0px, 0px, 0) scale(${zoomScale})`,
-              transition: "transform 120ms ease-out",
+              transform: `translate3d(${imageTranslate.x}px, ${imageTranslate.y}px, 0) scale(${zoomScale})`,
+              transition: (isDraggingImage || isPinching) ? "none" : "transform 120ms ease-out",
               transformOrigin: "center center",
+              touchAction: "none",
             }}
             onDoubleClick={handleDoubleClick}
             draggable={false}
@@ -272,6 +516,7 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
       <DialogContent
         showCloseButton={false}
         className="!h-[100vh] !w-[100vw] !max-h-[100vh] !max-w-[100vw] overflow-hidden border-0 bg-black/92 p-0 shadow-none"
+        style={{ touchAction: "none" }}
       >
         <VisuallyHidden>
           <DialogTitle>{currentItem.filename || "Attachment preview"}</DialogTitle>
@@ -306,20 +551,23 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
         </div>
 
         <div
+          ref={zoomSurfaceRef}
           data-testid={isImagePreview ? "preview-zoom-surface" : undefined}
           className={cn(
             "flex h-full w-full items-center justify-center px-3 pb-20 pt-16 sm:px-16 sm:pb-8 sm:pt-20",
-            isImagePreview && "cursor-zoom-in",
+            isImagePreview && (zoomScale > MIN_ZOOM ? (isDraggingImage ? "cursor-grabbing" : "cursor-grab") : "cursor-zoom-in"),
           )}
+          style={{ touchAction: "none" }}
           onWheel={handleWheel}
           onClick={(event) => {
             if (event.target === event.currentTarget && !isZoomed) {
               handleClose();
             }
           }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
         >
           <div
             ref={mediaWrapperRef}
