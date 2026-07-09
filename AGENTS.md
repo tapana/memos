@@ -50,12 +50,17 @@ cd proto && buf generate           # Regenerate Go + TypeScript + OpenAPI
 cd proto && buf lint               # Lint proto files
 cd proto && buf format -w          # Format proto files
 
-# Docker Compose & Verification Build
+# Docker Compose, Verification Build & Containerized Tests
 docker build -f scripts/Dockerfile.dev .                              # Verify build with development Dockerfile
 docker compose -f scripts/compose.dev.yaml up -d                      # Start dev server on :5231 (memos-dev) - ONLY USE DEV SERVER DURING TESTING/DEV VERIFICATION
 docker compose -f scripts/compose.dev.yaml down                       # Stop dev server
 docker compose -f scripts/compose.dev.yaml down && docker compose -f scripts/compose.dev.yaml up -d # Restart dev server
 docker compose -f scripts/compose.prod.yaml up -d                     # Prod server on :5230 (memos-prod)
+
+# Run frontend tests via Docker (useful if Node/pnpm is not installed locally)
+docker build --target frontend-builder -f scripts/Dockerfile.dev -t memos-frontend-test .
+docker run --rm memos-frontend-test pnpm test                         # Run all tests
+docker run --rm memos-frontend-test pnpm test <test-file>             # Run specific test file (e.g. preview-image-dialog.test.tsx)
 ```
 
 ## Code Map
@@ -123,6 +128,7 @@ docker compose -f scripts/compose.prod.yaml up -d                     # Prod ser
 - Before finishing, run the checks that match the changed surface from "Change Routing".
 - For docs-only changes, `git diff --check` is sufficient unless the docs include runnable examples that should be tested.
 - If a required check cannot run locally, report the reason and the exact command that remains.
+- Always run frontend unit tests containerized using the `frontend-builder` target image. Running unit tests is a mandatory part of the verification step for any changes affecting the frontend.
 - Verify the build using the development Dockerfile: `docker build -f scripts/Dockerfile.dev .`
 - Restart the dev server after verify: `docker compose -f scripts/compose.dev.yaml down && docker compose -f scripts/compose.dev.yaml up -d`
 
