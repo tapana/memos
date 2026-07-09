@@ -133,16 +133,34 @@ describe("<PreviewImageDialog>", () => {
     expect(screen.getByAltText("Preview image 1 of 2")).toBeInTheDocument();
 
     // Swipe left (next item): from x=200 to x=100
-    fireEvent.touchStart(surface, { touches: [{ clientX: 200, clientY: 100 }] });
-    fireEvent.touchMove(surface, { touches: [{ clientX: 150, clientY: 100 }] });
-    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 100, clientY: 100 }] });
+    fireEvent.touchStart(surface, {
+      touches: [{ clientX: 200, clientY: 100 }],
+      changedTouches: [{ clientX: 200, clientY: 100 }],
+    });
+    fireEvent.touchMove(surface, {
+      touches: [{ clientX: 150, clientY: 100 }],
+      changedTouches: [{ clientX: 150, clientY: 100 }],
+    });
+    fireEvent.touchEnd(surface, {
+      touches: [],
+      changedTouches: [{ clientX: 100, clientY: 100 }],
+    });
 
     expect(screen.getByAltText("Preview image 2 of 2")).toBeInTheDocument();
 
     // Swipe right (previous item): from x=100 to x=200
-    fireEvent.touchStart(surface, { touches: [{ clientX: 100, clientY: 100 }] });
-    fireEvent.touchMove(surface, { touches: [{ clientX: 150, clientY: 100 }] });
-    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 200, clientY: 100 }] });
+    fireEvent.touchStart(surface, {
+      touches: [{ clientX: 100, clientY: 100 }],
+      changedTouches: [{ clientX: 100, clientY: 100 }],
+    });
+    fireEvent.touchMove(surface, {
+      touches: [{ clientX: 150, clientY: 100 }],
+      changedTouches: [{ clientX: 150, clientY: 100 }],
+    });
+    fireEvent.touchEnd(surface, {
+      touches: [],
+      changedTouches: [{ clientX: 200, clientY: 100 }],
+    });
 
     expect(screen.getByAltText("Preview image 1 of 2")).toBeInTheDocument();
   });
@@ -164,16 +182,34 @@ describe("<PreviewImageDialog>", () => {
     expect(screen.getByAltText("Preview image 1 of 2")).toBeInTheDocument();
 
     // Swipe down (vertical): from clientY=100 to clientY=200 (clientX constant)
-    fireEvent.touchStart(surface, { touches: [{ clientX: 100, clientY: 100 }] });
-    fireEvent.touchMove(surface, { touches: [{ clientX: 100, clientY: 150 }] });
-    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 100, clientY: 200 }] });
+    fireEvent.touchStart(surface, {
+      touches: [{ clientX: 100, clientY: 100 }],
+      changedTouches: [{ clientX: 100, clientY: 100 }],
+    });
+    fireEvent.touchMove(surface, {
+      touches: [{ clientX: 100, clientY: 150 }],
+      changedTouches: [{ clientX: 100, clientY: 150 }],
+    });
+    fireEvent.touchEnd(surface, {
+      touches: [],
+      changedTouches: [{ clientX: 100, clientY: 200 }],
+    });
 
     expect(screen.getByAltText("Preview image 1 of 2")).toBeInTheDocument();
 
     // Tiny swipe (distance < 50px): from x=100 to x=120
-    fireEvent.touchStart(surface, { touches: [{ clientX: 100, clientY: 100 }] });
-    fireEvent.touchMove(surface, { touches: [{ clientX: 110, clientY: 100 }] });
-    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 120, clientY: 100 }] });
+    fireEvent.touchStart(surface, {
+      touches: [{ clientX: 100, clientY: 100 }],
+      changedTouches: [{ clientX: 100, clientY: 100 }],
+    });
+    fireEvent.touchMove(surface, {
+      touches: [{ clientX: 110, clientY: 100 }],
+      changedTouches: [{ clientX: 110, clientY: 100 }],
+    });
+    fireEvent.touchEnd(surface, {
+      touches: [],
+      changedTouches: [{ clientX: 120, clientY: 100 }],
+    });
 
     expect(screen.getByAltText("Preview image 1 of 2")).toBeInTheDocument();
   });
