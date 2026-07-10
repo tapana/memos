@@ -11,7 +11,7 @@ describe("<About>", () => {
   it("renders the product story and current bird sprites", () => {
     render(<About />);
 
-    expect(screen.getByRole("heading", { name: "Memos" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sophia" })).toBeInTheDocument();
     expect(screen.getByText(/Capture first/i)).toBeInTheDocument();
     expect(screen.getByText(/quick capture/i)).toBeInTheDocument();
 

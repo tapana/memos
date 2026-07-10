@@ -32,7 +32,7 @@ const About = () => {
       <div className="w-full">
         <div className="w-full rounded-xl border border-border bg-background px-4 py-4 text-muted-foreground">
           <SettingSection
-            title="About Memos"
+            title="About Sophia"
             description="Open-source, self-hosted note-taking built for quick capture: Markdown-native, lightweight, and fully yours."
           >
             <SettingGroup>
@@ -40,7 +40,7 @@ const About = () => {
                 <div className="flex min-w-0 items-center gap-3">
                   <img className="size-12 shrink-0 select-none rounded-md" src="/logo.webp" alt="" draggable={false} />
                   <div className="min-w-0">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Memos</h1>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Sophia</h1>
                     <p className="mt-1 text-sm text-muted-foreground">Capture first. Keep it yours.</p>
                   </div>
                 </div>
