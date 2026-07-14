@@ -213,4 +213,57 @@ describe("<PreviewImageDialog>", () => {
 
     expect(screen.getByAltText("Preview image 1 of 2")).toBeInTheDocument();
   });
+
+  it("closes the preview when swiping down past the threshold", () => {
+    const handleOpenChange = vi.fn();
+    render(
+      <PreviewImageDialog
+        open
+        onOpenChange={handleOpenChange}
+        items={[
+          { id: "image-1", kind: "image", sourceUrl: "/image-1.jpg", posterUrl: "/image-1.jpg", filename: "image-1.jpg" },
+        ]}
+      />,
+    );
+
+    const surface = screen.getByTestId("preview-zoom-surface");
+
+    // Swipe down past threshold (deltaY = 101px)
+    fireEvent.touchStart(surface, {
+      touches: [{ clientX: 100, clientY: 100 }],
+      changedTouches: [{ clientX: 100, clientY: 100 }],
+    });
+    fireEvent.touchMove(surface, {
+      touches: [{ clientX: 100, clientY: 160 }],
+      changedTouches: [{ clientX: 100, clientY: 160 }],
+    });
+    fireEvent.touchEnd(surface, {
+      touches: [],
+      changedTouches: [{ clientX: 100, clientY: 201 }],
+    });
+
+    expect(handleOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("closes the preview when mouse dragging down past the threshold", () => {
+    const handleOpenChange = vi.fn();
+    render(
+      <PreviewImageDialog
+        open
+        onOpenChange={handleOpenChange}
+        items={[
+          { id: "image-1", kind: "image", sourceUrl: "/image-1.jpg", posterUrl: "/image-1.jpg", filename: "image-1.jpg" },
+        ]}
+      />,
+    );
+
+    const surface = screen.getByTestId("preview-zoom-surface");
+
+    // Mouse drag down past threshold (deltaY = 101px)
+    fireEvent.mouseDown(surface, { clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(surface, { clientX: 100, clientY: 160 });
+    fireEvent.mouseUp(surface, { clientX: 100, clientY: 201 });
+
+    expect(handleOpenChange).toHaveBeenCalledWith(false);
+  });
 });

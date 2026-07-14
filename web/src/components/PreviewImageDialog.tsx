@@ -29,6 +29,8 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
   const [zoomScale, setZoomScale] = useState(MIN_ZOOM);
   const [offsetX, setOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [dragOffsetY, setDragOffsetY] = useState(0);
+  const [isDraggingDown, setIsDraggingDown] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const mediaWrapperRef = useRef<HTMLDivElement>(null);
@@ -53,6 +55,8 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
   const lastTouchDblTapTimeRef = useRef<number>(0);
   const isDoubleTappingRef = useRef<boolean>(false);
   const isDraggingSwipeRef = useRef<boolean>(false);
+  const isDraggingDownRef = useRef<boolean>(false);
+  const wasDraggingDownRef = useRef<boolean>(false);
   const isDraggingImageLocalRef = useRef<boolean>(false);
   const isPinchingLocalRef = useRef<boolean>(false);
   const previewItems = useMemo(
@@ -144,6 +148,9 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
   useEffect(() => {
     setZoomScale(MIN_ZOOM);
     setImageTranslate({ x: 0, y: 0 });
+    setDragOffsetY(0);
+    setIsDraggingDown(false);
+    wasDraggingDownRef.current = false;
     setIsLoaded(false);
   }, [currentItem?.id, open]);
 
@@ -187,6 +194,7 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
   const handleNextRef = useRef(handleNext);
   const canGoPreviousRef = useRef(canGoPrevious);
   const canGoNextRef = useRef(canGoNext);
+  const handleCloseRef = useRef(handleClose);
 
   zoomScaleRef.current = zoomScale;
   imageTranslateRef.current = imageTranslate;
@@ -194,6 +202,7 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
   handleNextRef.current = handleNext;
   canGoPreviousRef.current = canGoPrevious;
   canGoNextRef.current = canGoNext;
+  handleCloseRef.current = handleClose;
 
   const zoomSurfaceRef = useCallback((surface: HTMLDivElement | null) => {
     if (activeTouchListenersRef.current) {
@@ -245,6 +254,8 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
           translateStartRef.current = { ...currentImageTranslate };
         } else {
           isDraggingSwipeRef.current = false;
+          isDraggingDownRef.current = false;
+          wasDraggingDownRef.current = false;
           touchStartRef.current = {
             x: e.touches[0].clientX,
             y: e.touches[0].clientY,
@@ -283,9 +294,14 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
           const deltaX = touch.clientX - touchStartRef.current.x;
           const deltaY = touch.clientY - touchStartRef.current.y;
 
-          if (!isDraggingSwipeRef.current && Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
-            isDraggingSwipeRef.current = true;
-            setIsDragging(true);
+          if (!isDraggingSwipeRef.current && !isDraggingDownRef.current) {
+            if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
+              isDraggingSwipeRef.current = true;
+              setIsDragging(true);
+            } else if (Math.abs(deltaY) > 10 && Math.abs(deltaY) > Math.abs(deltaX)) {
+              isDraggingDownRef.current = true;
+              setIsDraggingDown(true);
+            }
           }
 
           if (isDraggingSwipeRef.current) {
@@ -294,6 +310,13 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
               setOffsetX(deltaX * 0.3);
             } else {
               setOffsetX(deltaX);
+            }
+          } else if (isDraggingDownRef.current) {
+            if (e.cancelable) e.preventDefault();
+            if (deltaY < 0) {
+              setDragOffsetY(deltaY * 0.2);
+            } else {
+              setDragOffsetY(deltaY);
             }
           }
         }
@@ -324,6 +347,7 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
     const onTouchEnd = (e: TouchEvent) => {
       const currentZoomScale = zoomScaleRef.current;
       const wasDraggingSwipe = isDraggingSwipeRef.current;
+      const wasDraggingDown = isDraggingDownRef.current;
 
       if (isDoubleTappingRef.current) {
         e.preventDefault();
@@ -331,9 +355,11 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
       }
 
       isDraggingSwipeRef.current = false;
+      isDraggingDownRef.current = false;
       isDraggingImageLocalRef.current = false;
       isPinchingLocalRef.current = false;
       setIsDragging(false);
+      setIsDraggingDown(false);
       setIsDraggingImage(false);
       setIsPinching(false);
 
@@ -344,12 +370,24 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
       if (!touch || currentZoomScale > MIN_ZOOM) {
         touchStartRef.current = null;
         setOffsetX(0);
+        setDragOffsetY(0);
         return;
       }
 
       const deltaX = touch.clientX - touchStartRef.current.x;
       const deltaY = touch.clientY - touchStartRef.current.y;
       touchStartRef.current = null;
+
+      if (wasDraggingDown) {
+        wasDraggingDownRef.current = true;
+        const minSwipeDownDistance = 100;
+        if (deltaY > minSwipeDownDistance) {
+          handleCloseRef.current();
+        } else {
+          setDragOffsetY(0);
+        }
+        return;
+      }
 
       const minSwipeDistance = 50;
       if (wasDraggingSwipe && Math.abs(deltaX) > minSwipeDistance && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
@@ -412,8 +450,8 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
     if (zoomScale > MIN_ZOOM && isImagePreview) {
-      if (e.button !== 0) return;
       isDraggingImageLocalRef.current = true;
       setIsDraggingImage(true);
       dragStartRef.current = {
@@ -422,6 +460,14 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
       };
       translateStartRef.current = { ...imageTranslate };
       e.preventDefault();
+    } else if (zoomScale === MIN_ZOOM) {
+      isDraggingDownRef.current = false;
+      isDraggingSwipeRef.current = false;
+      wasDraggingDownRef.current = false;
+      touchStartRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+      };
     }
   };
 
@@ -432,13 +478,52 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
       const targetX = translateStartRef.current.x + deltaX;
       const targetY = translateStartRef.current.y + deltaY;
       setImageTranslate(clampImageTranslation(targetX, targetY, zoomScale));
+    } else if (zoomScale === MIN_ZOOM && touchStartRef.current) {
+      const deltaX = e.clientX - touchStartRef.current.x;
+      const deltaY = e.clientY - touchStartRef.current.y;
+
+      if (!isDraggingDownRef.current) {
+        if (Math.abs(deltaY) > 10 && Math.abs(deltaY) > Math.abs(deltaX)) {
+          isDraggingDownRef.current = true;
+          setIsDraggingDown(true);
+        }
+      }
+
+      if (isDraggingDownRef.current) {
+        e.preventDefault();
+        if (deltaY < 0) {
+          setDragOffsetY(deltaY * 0.2);
+        } else {
+          setDragOffsetY(deltaY);
+        }
+      }
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e?: React.MouseEvent<HTMLDivElement>) => {
     if (isDraggingImageLocalRef.current) {
       isDraggingImageLocalRef.current = false;
       setIsDraggingImage(false);
+    }
+
+    if (zoomScale === MIN_ZOOM && touchStartRef.current) {
+      const wasDraggingDown = isDraggingDownRef.current;
+      wasDraggingDownRef.current = wasDraggingDown;
+      const clientY = e ? e.clientY : touchStartRef.current.y;
+      const deltaY = clientY - touchStartRef.current.y;
+
+      touchStartRef.current = null;
+      isDraggingDownRef.current = false;
+      setIsDraggingDown(false);
+
+      if (wasDraggingDown) {
+        const minSwipeDownDistance = 100;
+        if (deltaY > minSwipeDownDistance) {
+          handleClose();
+        } else {
+          setDragOffsetY(0);
+        }
+      }
     }
   };
 
@@ -520,12 +605,18 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
     return null;
   }
 
+  const opacityFactor = dragOffsetY > 0 ? Math.max(0, 1 - dragOffsetY / 300) : 1;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="!h-[100vh] !w-[100vw] !max-h-[100vh] !max-w-[100vw] overflow-hidden border-0 bg-black/92 p-0 shadow-none"
-        style={{ touchAction: "none" }}
+        className="!h-[100vh] !w-[100vw] !max-h-[100vh] !max-w-[100vw] overflow-hidden border-0 p-0 shadow-none"
+        style={{
+          touchAction: "none",
+          backgroundColor: `rgba(0, 0, 0, ${0.92 * opacityFactor})`,
+          transition: isDraggingDown ? "none" : "background-color 200ms ease-out",
+        }}
       >
         <VisuallyHidden>
           <DialogTitle>{currentItem.filename || "Attachment preview"}</DialogTitle>
@@ -569,7 +660,7 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
           style={{ touchAction: "none" }}
           onWheel={handleWheel}
           onClick={(event) => {
-            if (event.target === event.currentTarget && !isZoomed) {
+            if (event.target === event.currentTarget && !isZoomed && !wasDraggingDownRef.current) {
               handleClose();
             }
           }}
@@ -583,8 +674,8 @@ function PreviewImageDialog({ open, onOpenChange, imgUrls = [], items, initialIn
             className="relative w-full h-full flex items-center justify-center overflow-visible"
             onClick={(event) => event.stopPropagation()}
             style={{
-              transform: `translate3d(${offsetX}px, 0px, 0)`,
-              transition: isDragging ? "none" : "transform 200ms ease-out",
+              transform: `translate3d(${offsetX}px, ${dragOffsetY}px, 0)`,
+              transition: (isDragging || isDraggingDown) ? "none" : "transform 200ms ease-out",
             }}
           >
             {canGoPrevious && (
